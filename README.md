@@ -399,6 +399,14 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.7.3 Highlights
+
+Desktop packaging fix for Linux AppImage and deb builds.
+
+- **Linux desktop native modules match Electron.** Packaged Linux builds now copy Electron-rebuilt native addons into the embedded Next standalone server, fixing the `better-sqlite3` Node ABI mismatch reported in [#65](https://github.com/swarmclawai/swarmclaw/issues/65).
+- **Desktop packaging regression coverage.** The Electron `afterPack` hook now has a Linux standalone native-module sync test wired into `npm run test:cli`.
+- **macOS desktop note.** macOS builds remain ad-hoc signed and not notarized in this release, so the existing Gatekeeper/quarantine workaround still applies until Developer ID signing is available.
+
 ### v1.7.2 Highlights
 
 CLI provider usability follow-up for v1.7.0/v1.7.1. The expanded coding-agent roster is now easier to find, configure, and validate from onboarding and setup diagnostics.

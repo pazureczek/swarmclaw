@@ -18,6 +18,7 @@ const NATIVE_MODULES = [
   'node-liblzma',
   'utf-8-validate',
 ]
+const REQUIRED_SYNC_MODULES = new Set(['better-sqlite3'])
 
 function copyIfExists(src, dest) {
   if (!fs.existsSync(src)) return false
@@ -41,24 +42,17 @@ function syncNativeBuildDir(rootPkgDir, standalonePkgDir) {
   return synced
 }
 
-exports.default = async function afterPack(context) {
-  if (context.electronPlatformName !== 'darwin') return
+function resolveResourcesDir(context) {
+  const appName = context.packager.appInfo.productFilename
+  if (context.electronPlatformName === 'darwin') {
+    return path.join(context.appOutDir, `${appName}.app`, 'Contents', 'Resources')
+  }
+  return path.join(context.appOutDir, 'resources')
+}
 
-  const projectDir = context.packager.info.projectDir
+function signMacApp(context) {
   const appName = context.packager.appInfo.productFilename
   const appPath = path.join(context.appOutDir, `${appName}.app`)
-  const standaloneNodeModules = path.join(appPath, 'Contents', 'Resources', '.next', 'standalone', 'node_modules')
-  const rootNodeModules = path.join(projectDir, 'node_modules')
-  const archName = ARCH_NAMES[context.arch]
-  if (!archName) throw new Error(`afterPack: unknown arch ${context.arch}`)
-
-  console.log(`[after-pack] syncing native modules into standalone for arch=${archName}`)
-  for (const moduleName of NATIVE_MODULES) {
-    const rootPkg = path.join(rootNodeModules, moduleName)
-    const standalonePkg = path.join(standaloneNodeModules, moduleName)
-    const synced = syncNativeBuildDir(rootPkg, standalonePkg)
-    console.log(`[after-pack]   ${moduleName}: ${synced ? 'synced' : 'skipped'}`)
-  }
 
   console.log(`[after-pack] ad-hoc signing ${appPath}`)
   const codesign = spawnSync(
@@ -76,4 +70,25 @@ exports.default = async function afterPack(context) {
   if (codesign.status !== 0) {
     throw new Error(`afterPack: codesign ad-hoc failed with status ${codesign.status}`)
   }
+}
+
+exports.default = async function afterPack(context) {
+  const projectDir = context.packager.info.projectDir
+  const standaloneNodeModules = path.join(resolveResourcesDir(context), '.next', 'standalone', 'node_modules')
+  const rootNodeModules = path.join(projectDir, 'node_modules')
+  const archName = ARCH_NAMES[context.arch]
+  if (!archName) throw new Error(`afterPack: unknown arch ${context.arch}`)
+
+  console.log(`[after-pack] syncing native modules into standalone for arch=${archName}`)
+  for (const moduleName of NATIVE_MODULES) {
+    const rootPkg = path.join(rootNodeModules, moduleName)
+    const standalonePkg = path.join(standaloneNodeModules, moduleName)
+    const synced = syncNativeBuildDir(rootPkg, standalonePkg)
+    console.log(`[after-pack]   ${moduleName}: ${synced ? 'synced' : 'skipped'}`)
+    if (!synced && REQUIRED_SYNC_MODULES.has(moduleName) && fs.existsSync(standalonePkg)) {
+      throw new Error(`afterPack: failed to sync required native module ${moduleName}`)
+    }
+  }
+
+  if (context.electronPlatformName === 'darwin') signMacApp(context)
 }

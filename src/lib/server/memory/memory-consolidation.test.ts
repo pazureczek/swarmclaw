@@ -124,3 +124,34 @@ test('canCreateDailyDigestForAgent allows CLI-only agents when a dream model is 
     true,
   )
 })
+
+test('canCreateDailyDigestForAgent allows CLI-only agents with a per-agent dream model override', async () => {
+  const now = Date.now()
+  const agentId = 'agent-dream-override-cli'
+  storage.saveSettings({})
+  storage.saveAgents({
+    [agentId]: {
+      id: agentId,
+      name: 'Per-Agent Dream Routed CLI Agent',
+      description: '',
+      systemPrompt: '',
+      provider: 'claude-cli',
+      model: 'claude-sonnet-4-5',
+      credentialId: null,
+      fallbackCredentialIds: [],
+      apiEndpoint: null,
+      dreamConfig: {
+        provider: 'ollama',
+        model: 'llama3.2',
+        endpoint: 'http://127.0.0.1:11434',
+      },
+      createdAt: now,
+      updatedAt: now,
+    } as Agent,
+  })
+
+  assert.equal(
+    consolidation.canCreateDailyDigestForAgent(agentId, storage.loadAgents({ includeTrashed: true }), storage.loadSettings()),
+    true,
+  )
+})

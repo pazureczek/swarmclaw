@@ -202,6 +202,212 @@ describe('supervisor-reflection', () => {
     ])
   })
 
+  it('persists low-quality reflections while skipping auto-written memory', () => {
+    const output = runWithTempDataDir(`
+      const storageMod = await import('@/lib/server/storage')
+      const storage = storageMod.default || storageMod['module.exports'] || storageMod
+      const reflectionMod = await import('@/lib/server/autonomy/supervisor-reflection')
+      const mod = reflectionMod.default || reflectionMod['module.exports'] || reflectionMod
+      const memoryDbMod = await import('@/lib/server/memory/memory-db')
+      const memoryMod = memoryDbMod.default || memoryDbMod['module.exports'] || memoryDbMod
+
+      storage.saveAgents({
+        'agent-a': {
+          id: 'agent-a',
+          name: 'Agent A',
+          provider: 'openai',
+          model: 'gpt-test',
+        },
+      })
+
+      storage.saveSessions({
+        s1: {
+          id: 's1',
+          name: 'Autonomy Session',
+          cwd: process.cwd(),
+          user: 'tester',
+          provider: 'openai',
+          model: 'gpt-test',
+          claudeSessionId: null,
+          messages: [
+            { role: 'user', text: 'Repair the deployment workflow and keep notes for later.', time: 1 },
+            { role: 'assistant', text: 'I retried the same shell path and nothing changed.', time: 2 },
+          ],
+          createdAt: 1,
+          lastActiveAt: 2,
+          sessionType: 'human',
+          agentId: 'agent-a',
+        },
+      })
+
+      storage.saveSettings({
+        supervisorEnabled: true,
+        supervisorRuntimeScope: 'both',
+        supervisorNoProgressLimit: 2,
+        supervisorRepeatedToolLimit: 3,
+        reflectionEnabled: true,
+        reflectionAutoWriteMemory: true,
+        reflectionMinQuality: 0.8,
+      })
+
+      const result = await mod.observeAutonomyRunOutcome({
+        runId: 'run-low-quality',
+        sessionId: 's1',
+        agentId: 'agent-a',
+        source: 'chat',
+        status: 'completed',
+        resultText: 'I retried the same shell path and nothing changed.',
+        toolEvents: [
+          { name: 'shell', input: '{"cmd":"npm test"}' },
+          { name: 'shell', input: '{"cmd":"npm test"}' },
+          { name: 'shell', input: '{"cmd":"npm test"}' },
+        ],
+        mainLoopState: {
+          followupChainCount: 2,
+          summary: 'I retried the same shell path and nothing changed.',
+        },
+        sourceMessage: 'Repair the deployment workflow and keep notes for later.',
+      }, {
+        generateText: async () => JSON.stringify({
+          summary: 'Low quality reflection',
+          lessons: ['This weak note should not be written to memory.'],
+          quality_score: 0.25,
+          quality_reasoning: 'Too generic to keep as durable memory.',
+        }),
+      })
+
+      const memories = memoryMod.getMemoryDb().list(undefined, 50)
+        .filter((entry) => entry.metadata && entry.metadata.origin === 'autonomy-reflection')
+
+      console.log(JSON.stringify({
+        reflectionSummary: result.reflection?.summary ?? null,
+        qualityScore: result.reflection?.qualityScore ?? null,
+        autoMemoryCount: result.reflection?.autoMemoryIds?.length ?? 0,
+        storedReflectionMemoryCount: memories.length,
+      }))
+    `)
+
+    assert.equal(output.reflectionSummary, 'Low quality reflection')
+    assert.equal(output.qualityScore, 0.25)
+    assert.equal(output.autoMemoryCount, 0)
+    assert.equal(output.storedReflectionMemoryCount, 0)
+  })
+
+  it('skips semantically duplicate reflection memory when embedding dedup is enabled', () => {
+    const output = runWithTempDataDir(`
+      const http = await import('node:http')
+      const path = await import('node:path')
+      const Database = (await import('better-sqlite3')).default
+      const storageMod = await import('@/lib/server/storage')
+      const storage = storageMod.default || storageMod['module.exports'] || storageMod
+      const reflectionMod = await import('@/lib/server/autonomy/supervisor-reflection')
+      const mod = reflectionMod.default || reflectionMod['module.exports'] || reflectionMod
+      const memoryDbMod = await import('@/lib/server/memory/memory-db')
+      const memoryMod = memoryDbMod.default || memoryDbMod['module.exports'] || memoryDbMod
+      const settingsRepositoryMod = await import('@/lib/server/settings/settings-repository')
+      const settingsRepository = settingsRepositoryMod.default || settingsRepositoryMod['module.exports'] || settingsRepositoryMod
+
+      const server = http.createServer((req, res) => {
+        res.setHeader('content-type', 'application/json')
+        res.end(JSON.stringify({ embedding: [1, 0] }))
+      })
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+      const endpoint = 'http://127.0.0.1:' + server.address().port
+
+      try {
+        storage.saveAgents({
+          'agent-a': {
+            id: 'agent-a',
+            name: 'Agent A',
+            provider: 'openai',
+            model: 'gpt-test',
+          },
+        })
+
+        storage.saveSessions({
+          s1: {
+            id: 's1',
+            name: 'Semantic Dedup Session',
+            cwd: process.cwd(),
+            user: 'tester',
+            provider: 'openai',
+            model: 'gpt-test',
+            claudeSessionId: null,
+            messages: [
+              { role: 'user', text: 'Release carefully and keep the durable lesson.', time: 1 },
+              { role: 'assistant', text: 'I checked the release gates before shipping.', time: 2 },
+            ],
+            createdAt: 1,
+            lastActiveAt: 2,
+            sessionType: 'human',
+            agentId: 'agent-a',
+          },
+        })
+
+        const memDb = memoryMod.getMemoryDb()
+        const existing = memDb.add({
+          agentId: 'agent-a',
+          sessionId: 's1',
+          category: 'reflection/lesson',
+          title: 'Reflection Lesson',
+          content: 'Always verify release gates before shipping.',
+          metadata: { origin: 'autonomy-reflection' },
+        })
+        const rawDb = new Database(path.join(process.env.DATA_DIR, 'memory.db'))
+        rawDb.prepare('UPDATE memories SET embedding = ? WHERE id = ?').run(Buffer.from(new Float32Array([1, 0]).buffer), existing.id)
+        rawDb.close()
+
+        settingsRepository.saveSettings({
+          supervisorEnabled: true,
+          supervisorRuntimeScope: 'both',
+          supervisorNoProgressLimit: 2,
+          supervisorRepeatedToolLimit: 3,
+          reflectionEnabled: true,
+          reflectionAutoWriteMemory: true,
+          reflectionSemanticDedupEnabled: true,
+          reflectionSemanticDedupThreshold: 0.9,
+          embeddingProvider: 'ollama',
+          embeddingModel: 'test-embedding',
+          embeddingEndpoint: endpoint,
+        })
+
+        const result = await mod.observeAutonomyRunOutcome({
+          runId: 'run-semantic-dedup',
+          sessionId: 's1',
+          agentId: 'agent-a',
+          source: 'chat',
+          status: 'completed',
+          resultText: 'I checked the release gates before shipping.',
+          toolEvents: [
+            { name: 'shell', input: '{"cmd":"npm test"}' },
+          ],
+          sourceMessage: 'Release carefully and keep the durable lesson.',
+        }, {
+          generateText: async () => JSON.stringify({
+            summary: 'Release gate reflection',
+            lessons: ['Confirm release gates before shipping.'],
+            quality_score: 0.95,
+          }),
+        })
+
+        const reflectionMemories = memDb.list('agent-a', 50)
+          .filter((entry) => entry.metadata && entry.metadata.origin === 'autonomy-reflection')
+
+        console.log(JSON.stringify({
+          reflectionSummary: result.reflection?.summary ?? null,
+          autoMemoryCount: result.reflection?.autoMemoryIds?.length ?? 0,
+          reflectionMemoryContents: reflectionMemories.map((entry) => entry.content).sort(),
+        }))
+      } finally {
+        await new Promise((resolve) => server.close(resolve))
+      }
+    `)
+
+    assert.equal(output.reflectionSummary, 'Release gate reflection')
+    assert.equal(output.autoMemoryCount, 0)
+    assert.deepEqual(output.reflectionMemoryContents, ['Always verify release gates before shipping.'])
+  })
+
   it('reflects short human chats when they contain durable personal context', () => {
     const output = runWithTempDataDir(`
       const storageMod = await import('@/lib/server/storage')

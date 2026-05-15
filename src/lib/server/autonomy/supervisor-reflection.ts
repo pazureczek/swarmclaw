@@ -814,12 +814,10 @@ async function writeReflectionMemories(params: {
   // memories' embeddings. Catches near-duplicates the LLM re-derives in
   // different words ("Always verify before acting" / "Confirm state first").
   // Falls back gracefully when embeddings aren't configured.
-  let appSettings: AppSettings | null = null
-  try { appSettings = loadSettings() } catch { appSettings = null }
-  const semanticDedupEnabled = Boolean(appSettings?.reflectionSemanticDedupEnabled)
-  const semanticDedupThreshold = typeof appSettings?.reflectionSemanticDedupThreshold === 'number'
-    ? appSettings.reflectionSemanticDedupThreshold
-    : 0.88
+  let reflectionSettings: NormalizedSupervisorSettings | null = null
+  try { reflectionSettings = normalizeSupervisorSettings(loadSettings()) } catch { reflectionSettings = null }
+  const semanticDedupEnabled = reflectionSettings?.reflectionSemanticDedupEnabled === true
+  const semanticDedupThreshold = reflectionSettings?.reflectionSemanticDedupThreshold ?? 0.88
   const semanticSkip = new Set<string>()
   if (semanticDedupEnabled && params.agentId) {
     try {

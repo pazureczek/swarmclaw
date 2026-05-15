@@ -151,6 +151,15 @@ openclaw skills install swarmclaw
 
 [Browse on ClawHub](https://clawhub.ai/waydelyle/swarmclaw)
 
+## v1.9.32 Highlights
+
+PR integration release for background model routing, reflection memory controls, and current ClawHub install guidance.
+
+- **Background model routing.** Per-agent `dreamConfig` overrides can route dream cycles and daily digests before global dream settings, while `compactionProvider` settings can route live auto-compaction summaries through a cheaper or faster model.
+- **Reflection memory controls.** `reflectionMinQuality` gates automatic reflection memory writes without dropping the reflection record, and optional embedding dedup skips near-duplicate reflection notes when embeddings are configured.
+- **ClawHub install guidance.** OpenClaw skill docs now use `openclaw skills install swarmclaw` and current owner-scoped ClawHub links.
+- **Regression coverage.** Added tests for dream override precedence, compaction preference resolution, reflection quality gating, and embedding-based reflection dedup.
+
 ## v1.9.31 Highlights
 
 Documentation cleanup release for public release notes and OpenClaw guidance. No runtime behavior changed.
@@ -425,6 +434,15 @@ If you need a trace-specific endpoint, set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 
 Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
+
+### v1.9.32 Highlights
+
+PR integration release for background model routing, reflection memory controls, and current ClawHub install guidance.
+
+- **Background model routing.** Per-agent `dreamConfig` overrides can route dream cycles and daily digests before global dream settings, while `compactionProvider` settings can route live auto-compaction summaries through a cheaper or faster model.
+- **Reflection memory controls.** `reflectionMinQuality` gates automatic reflection memory writes without dropping the reflection record, and optional embedding dedup skips near-duplicate reflection notes when embeddings are configured.
+- **ClawHub install guidance.** OpenClaw skill docs now use `openclaw skills install swarmclaw` and current owner-scoped ClawHub links.
+- **Regression coverage.** Added tests for dream override precedence, compaction preference resolution, reflection quality gating, and embedding-based reflection dedup.
 
 ### v1.9.31 Highlights
 

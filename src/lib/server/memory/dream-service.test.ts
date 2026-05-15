@@ -22,6 +22,25 @@ describe('resolveDreamGenerationPreference', () => {
       apiEndpoint: 'http://localhost:11434',
     })
   })
+
+  it('uses a per-agent dream override before global app settings', () => {
+    assert.deepEqual(resolveDreamGenerationPreference({
+      dreamProvider: 'openai',
+      dreamModel: 'gpt-5-mini',
+      dreamCredentialId: 'global-cred',
+      dreamEndpoint: 'https://global.example/v1',
+    }, {
+      provider: ' ollama ',
+      model: ' qwen3:8b ',
+      credentialId: ' agent-cred ',
+      endpoint: ' http://127.0.0.1:11434 ',
+    }), {
+      provider: 'ollama',
+      model: 'qwen3:8b',
+      credentialId: 'agent-cred',
+      apiEndpoint: 'http://127.0.0.1:11434',
+    })
+  })
 })
 
 describe('parseTier2DreamResponseText', () => {

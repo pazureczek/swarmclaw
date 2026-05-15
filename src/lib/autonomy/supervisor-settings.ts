@@ -8,6 +8,9 @@ export const DEFAULT_SUPERVISOR_NO_PROGRESS_LIMIT = 2
 export const DEFAULT_SUPERVISOR_REPEATED_TOOL_LIMIT = 3
 export const DEFAULT_REFLECTION_ENABLED = true
 export const DEFAULT_REFLECTION_AUTO_WRITE_MEMORY = true
+export const DEFAULT_REFLECTION_MIN_QUALITY = 0
+export const DEFAULT_REFLECTION_SEMANTIC_DEDUP_ENABLED = false
+export const DEFAULT_REFLECTION_SEMANTIC_DEDUP_THRESHOLD = 0.88
 
 export const SUPERVISOR_NO_PROGRESS_LIMIT_MIN = 1
 export const SUPERVISOR_NO_PROGRESS_LIMIT_MAX = 8
@@ -22,6 +25,16 @@ function parseIntSetting(value: unknown, fallback: number, min: number, max: num
       : Number.NaN
   if (!Number.isFinite(parsed)) return fallback
   return Math.max(min, Math.min(max, Math.trunc(parsed)))
+}
+
+function parseNumberSetting(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+      ? Number.parseFloat(value)
+      : Number.NaN
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.max(min, Math.min(max, parsed))
 }
 
 function parseBoolSetting(value: unknown, fallback: boolean): boolean {
@@ -41,6 +54,9 @@ export interface NormalizedSupervisorSettings {
   supervisorRepeatedToolLimit: number
   reflectionEnabled: boolean
   reflectionAutoWriteMemory: boolean
+  reflectionMinQuality: number
+  reflectionSemanticDedupEnabled: boolean
+  reflectionSemanticDedupThreshold: number
 }
 
 export function normalizeSupervisorSettings(
@@ -69,6 +85,17 @@ export function normalizeSupervisorSettings(
     ),
     reflectionEnabled: parseBoolSetting(current.reflectionEnabled, DEFAULT_REFLECTION_ENABLED),
     reflectionAutoWriteMemory: parseBoolSetting(current.reflectionAutoWriteMemory, DEFAULT_REFLECTION_AUTO_WRITE_MEMORY),
+    reflectionMinQuality: parseNumberSetting(current.reflectionMinQuality, DEFAULT_REFLECTION_MIN_QUALITY, 0, 1),
+    reflectionSemanticDedupEnabled: parseBoolSetting(
+      current.reflectionSemanticDedupEnabled,
+      DEFAULT_REFLECTION_SEMANTIC_DEDUP_ENABLED,
+    ),
+    reflectionSemanticDedupThreshold: parseNumberSetting(
+      current.reflectionSemanticDedupThreshold,
+      DEFAULT_REFLECTION_SEMANTIC_DEDUP_THRESHOLD,
+      0,
+      1,
+    ),
   }
 }
 
